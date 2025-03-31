@@ -1,0 +1,9 @@
+alembic
+fastapi
+psycopg2-binary
+python-dotenv
+sqlalchemy
+fastapi-users[sqlalchemy]
+uvicorn
+asyncpg
+pyshorteners
