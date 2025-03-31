@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy import select, insert, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import RedirectResponse
@@ -134,6 +134,42 @@ async def shorten_lias(long_url: str, custom_alias: str, session: AsyncSession =
             })
             await session.execute(statement)
             await session.commit()
+            return {"status": "success"}
+        else:
+            raise Exception("Sorry, alias already exists")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "status": "error",
+            "data": e
+        })
+    
+
+def delete_on_expiration():
+    statement = delete(links).where(links.c.expiration_dt < datetime.now())
+    await session.execute(statement)
+    await session.commit()
+
+
+@router.post("/{expire_at}")
+async def shorten_lias(long_url: str, expire_at: str, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_async_session)):
+    try:
+        query = select(links)
+        result = await session.execute(query)
+        result_list = result.mappings().all()
+        used_short_codes = [x['short_code'] for x in result_list]
+
+        if custom_alias not in used_short_codes:
+            statement = insert(links).values({
+                links.c.long_url: long_url,
+                links.c.short_code: custom_alias,
+                links.c.create_dt: datetime.now(), #.strftime("%y-%m-%d %H-%M-%S.%f")[:-4],
+                links.c.last_queried_dt: datetime.now(), #.strftime("%y-%m-%d %H-%M-%S.%f")[:-4],
+                links.c.expire_dt: expire_at,
+                links.c.num_queries: 0
+            })
+            await session.execute(statement)
+            await session.commit()
+            background_tasks.add_task(delete_on_expiration)
             return {"status": "success"}
         else:
             raise Exception("Sorry, alias already exists")
